@@ -1,4 +1,7 @@
-from .manager import TaskQueue
-from .task import Task, NormalTask, PythonTask
+import os
+from .manager import TaskQueue, init
+from .task import Task, NormalTask, PythonTask, FunctionTask
 
-__all__ = ['TaskManager', 'Task', 'NormalTask', 'PythonTask']
+__all__ = [TaskQueue, Task, NormalTask, PythonTask, FunctionTask]
+
+init()
