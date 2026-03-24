@@ -10,7 +10,13 @@ def function1():
 
 if __name__ == '__main__':
     # 创建一个队列；ignore_fail=True 表示某个任务失败后继续执行后续任务
-    task_queue = TaskQueue(name='ExampleQueue', log_in_console=True, ignore_fail=True)
+    # use_rich_progress=False 使用标准版 tqdm；改为 True 可切换到 rich
+    task_queue = TaskQueue(
+        name='ExampleQueue',
+        log_in_console=True,
+        ignore_fail=True,
+        use_rich_progress=False,
+    )
 
     # 普通占位任务
     task_queue.add_task(NormalTask('Hello'))

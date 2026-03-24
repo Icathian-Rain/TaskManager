@@ -11,6 +11,7 @@
 - 通过返回码判断成功/失败
 - 支持失败后停止或继续执行
 - 支持任务失败回调 `errorFunction`
+- 支持通过布尔参数切换标准版或 rich 版进度条，默认使用标准版 `tqdm`
 
 ## 安装
 
@@ -41,7 +42,12 @@ def function1():
     return 0
 
 
-task_queue = TaskQueue(name='ExampleQueue', log_in_console=True, ignore_fail=True)
+task_queue = TaskQueue(
+    name='ExampleQueue',
+    log_in_console=True,
+    ignore_fail=True,
+    use_rich_progress=False,
+)
 task_queue.add_task(NormalTask('Hello'))
 task_queue.add_task(PythonTask('PythonTask1', 'pythonTask/task1.py'))
 task2_args = ['--args1', 'arg1', '--args2', 'arg2']
@@ -51,6 +57,8 @@ task_queue.add_task(FunctionTask('FunctionTask1', function1))
 task_queue.add_task(NormalTask('World'))
 task_queue.run()
 ```
+
+如果想使用 rich 风格进度条，可将 `use_rich_progress` 设为 `True`。
 
 运行示例：
 
@@ -71,6 +79,7 @@ uv run python example.py
 - `log_in_console`：是否输出日志到控制台
 - `ignore_fail`：任务失败后是否继续执行后续任务
 - `errorFunction`：任务失败时调用的回调函数
+- `use_rich_progress`：是否使用 rich 版进度条；`False` 为标准版 `tqdm`，`True` 为 rich 版，默认 `False`
 
 任务通过 `add_task()` 添加，通过 `run()` 启动执行。
 
@@ -113,6 +122,8 @@ logs/<queue_name>_<timestamp>/
 
 - `log.txt`：队列级总日志
 - `<task_name>.txt`：单个任务的输出日志
+
+如果启用了控制台日志，日志输出会通过当前选中的进度条实现写入，避免打断进度条显示。
 
 如果需要修改日志根目录，可使用 `taskmanager.manager.set_log_path(path)`。当前实现会在导入时先创建默认 `logs/` 目录，之后新建队列时再使用最新的 `LOG_PATH`。
 

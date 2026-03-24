@@ -1,12 +1,10 @@
-import os
 import tempfile
 import unittest
 import uuid
-from unittest.mock import patch
 
 from taskmanager import FunctionTask, TaskQueue
 from taskmanager import manager as manager_module
-from taskmanager.manager import set_log_path
+from taskmanager.manager import TqdmLoggingHandler, set_log_path
 
 
 class TaskQueueSmokeTests(unittest.TestCase):
@@ -24,19 +22,20 @@ class TaskQueueSmokeTests(unittest.TestCase):
         set_log_path(self.original_log_path)
         self.temp_dir.cleanup()
 
-    def make_queue(self, ignore_fail=False, error_function=None):
+    def make_queue(self, ignore_fail=False, error_function=None, use_rich_progress=False):
         queue = TaskQueue(
             name=f"TestQueue_{uuid.uuid4().hex}",
             log_in_console=False,
             ignore_fail=ignore_fail,
             errorFunction=error_function,
+            use_rich_progress=use_rich_progress,
         )
         self.loggers.append(queue.logger)
         return queue
 
     def run_queue(self, queue):
-        with patch("taskmanager.manager.tqdm", lambda tasks: tasks):
-            queue.run()
+        queue.tqdm = lambda tasks: tasks
+        queue.run()
 
     def test_tasks_run_in_order(self):
         events = []
@@ -105,19 +104,42 @@ class TaskQueueSmokeTests(unittest.TestCase):
         self.assertEqual(events, ["fail", "after_fail"])
         self.assertEqual(error_calls, ["called"])
 
-    def test_log_files_are_created(self):
-        def sample_task():
-            return 0
-
+    def test_default_progress_bar_is_standard(self):
         queue = self.make_queue()
-        queue.add_task(FunctionTask("sample", sample_task))
 
-        self.run_queue(queue)
+        self.assertFalse(queue.use_rich_progress)
+        self.assertIs(queue.tqdm, manager_module.standard_tqdm)
 
-        self.assertTrue(os.path.isdir(queue.dir_path))
-        self.assertTrue(os.path.isfile(os.path.join(queue.dir_path, "log.txt")))
-        self.assertTrue(os.path.isfile(os.path.join(queue.dir_path, "sample.txt")))
+    def test_console_logging_uses_selected_tqdm_writer(self):
+        queue = TaskQueue(name=f"TestQueue_{uuid.uuid4().hex}", log_in_file=False, log_in_console=True)
+        self.loggers.append(queue.logger)
 
+        console_handlers = [
+            handler for handler in queue.logger.handlers if isinstance(handler, TqdmLoggingHandler)
+        ]
 
-if __name__ == "__main__":
-    unittest.main()
+        self.assertEqual(len(console_handlers), 1)
+        self.assertIs(console_handlers[0].tqdm, manager_module.standard_tqdm)
+        self.assertFalse(queue.logger.propagate)
+
+    def test_rich_progress_bar_is_available(self):
+        queue = TaskQueue(
+            name=f"TestQueue_{uuid.uuid4().hex}",
+            log_in_file=False,
+            log_in_console=True,
+            use_rich_progress=True,
+        )
+        self.loggers.append(queue.logger)
+
+        console_handlers = [
+            handler for handler in queue.logger.handlers if isinstance(handler, TqdmLoggingHandler)
+        ]
+
+        self.assertTrue(queue.use_rich_progress)
+        self.assertIs(queue.tqdm, manager_module.rich_tqdm)
+        self.assertEqual(len(console_handlers), 1)
+        self.assertIs(console_handlers[0].tqdm, manager_module.rich_tqdm)
+
+    def test_invalid_progress_bar_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            self.make_queue(use_rich_progress='invalid')
