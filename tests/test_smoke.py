@@ -250,3 +250,19 @@ class TaskQueueSmokeTests(unittest.TestCase):
         self.assertCountEqual(started, ["fail", "running"])
         self.assertNotIn("after_fail", started)
         self.assertEqual(error_calls, ["called"])
+
+    def test_queue_log_and_task_output_are_separated(self):
+        queue = self.make_queue()
+        queue.add_task(FunctionTask("task1", lambda: 0))
+
+        self.run_queue(queue)
+
+        with open(os.path.join(queue.dir_path, 'log.txt'), 'r', encoding='utf-8') as file_handler:
+            queue_log = file_handler.read()
+        with open(os.path.join(queue.dir_path, 'task1.txt'), 'r', encoding='utf-8') as file_handler:
+            task_log = file_handler.read()
+
+        self.assertIn('[Begin] Running task: task1', queue_log)
+        self.assertNotIn('Task task1 is running...', queue_log)
+        self.assertIn('Task task1 is running...', task_log)
+        self.assertNotIn('[Begin] Running task: task1', task_log)

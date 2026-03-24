@@ -130,12 +130,12 @@ PythonTask('PythonTask2', 'pythonTask/task2.py', args=['--args1', 'arg1'])
 logs/<queue_name>_<timestamp>/
 ```
 
-目录中包含：
+目录中包含两类不同职责的日志：
 
-- `log.txt`：队列级总日志
-- `<task_name>.txt`：单个任务的输出日志
+- `log.txt`：`TaskQueue` 事件日志，记录任务开始、结束、失败、队列停止、全部完成等事件
+- `<task_name>.txt`：单个任务的输出日志，记录任务运行时写入的内容，以及异常 traceback
 
-如果启用了控制台日志，日志输出会通过当前选中的进度条实现写入，避免打断进度条显示。
+如果启用了控制台日志，队列事件日志会通过当前选中的进度条实现写入，避免打断进度条显示。
 
 如果需要修改日志根目录，可使用 `taskmanager.manager.set_log_path(path)`。当前实现会在导入时先创建默认 `logs/` 目录，之后新建队列时再使用最新的 `LOG_PATH`。
 

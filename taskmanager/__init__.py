@@ -1,4 +1,3 @@
-import os
 from .manager import TaskQueue, init
 from .task import Task, NormalTask, PythonTask, FunctionTask
 
