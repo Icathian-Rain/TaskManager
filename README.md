@@ -1,10 +1,11 @@
 # TaskManager
 
-一个轻量的 Python 任务队列，用于**串行执行**本地任务、Python 脚本和函数，并为队列和单个任务分别保存日志。
+一个轻量的 Python 任务队列，用于按顺序或并发运行本地任务、Python 脚本和函数，并为队列和单个任务分别保存日志。
 
 ## 功能概览
 
-- 按添加顺序串行执行任务
+- 支持按添加顺序串行执行任务
+- 支持通过 `max_workers` 开启并发执行多个任务
 - 支持 `NormalTask`、`FunctionTask`、`PythonTask`
 - 自动为每次队列运行创建独立日志目录
 - 为每个任务保存单独日志文件
@@ -47,6 +48,7 @@ task_queue = TaskQueue(
     log_in_console=True,
     ignore_fail=True,
     use_rich_progress=False,
+    max_workers=2,
 )
 task_queue.add_task(NormalTask('Hello'))
 task_queue.add_task(PythonTask('PythonTask1', 'pythonTask/task1.py'))
@@ -60,6 +62,8 @@ task_queue.run()
 
 如果想使用 rich 风格进度条，可将 `use_rich_progress` 设为 `True`。
 
+如果想保持原来的串行行为，可将 `max_workers` 保持默认值 `1`。
+
 运行示例：
 
 ```bash
@@ -70,7 +74,7 @@ uv run python example.py
 
 ### TaskQueue
 
-`TaskQueue` 负责管理任务列表并按顺序执行。
+`TaskQueue` 负责管理任务列表并执行任务。
 
 主要参数：
 
@@ -80,8 +84,16 @@ uv run python example.py
 - `ignore_fail`：任务失败后是否继续执行后续任务
 - `errorFunction`：任务失败时调用的回调函数
 - `use_rich_progress`：是否使用 rich 版进度条；`False` 为标准版 `tqdm`，`True` 为 rich 版，默认 `False`
+- `max_workers`：最大并发任务数；默认 `1` 表示串行执行，大于 `1` 时启用并发
 
 任务通过 `add_task()` 添加，通过 `run()` 启动执行。
+
+补充说明：
+
+- `max_workers=1` 时，行为与旧版本一致，任务严格串行执行
+- `max_workers>1` 时，队列会并发运行多个任务
+- 并发模式下每个任务仍会写入自己的独立日志文件
+- 同一个队列中的 `task.name` 必须唯一，否则会抛出异常，避免日志文件冲突
 
 ### Task
 
@@ -136,16 +148,24 @@ logs/<queue_name>_<timestamp>/
 
 失败时的行为：
 
+### 串行模式（`max_workers=1`）
+
 - `ignore_fail=False`：立即停止后续任务
 - `ignore_fail=True`：记录失败并继续执行后续任务
-- 如果提供了 `errorFunction`，失败时会先调用该回调
+- 如果提供了 `errorFunction`，每次失败时都会调用一次
+
+### 并发模式（`max_workers>1`）
+
+- `ignore_fail=True`：继续调度并执行剩余任务
+- `ignore_fail=False`：发现失败后，不再提交尚未启动的新任务；已经开始运行的任务会继续执行到结束
+- 如果提供了 `errorFunction`，每次失败时都会调用一次
 
 `pythonTask/task3.py` 就是一个失败示例任务。
 
 ## 当前限制
 
-- 当前队列是**串行执行**，不支持并行调度多个任务
-- `PythonTask` 的“异步”仅用于异步读取子进程输出，不代表多个任务并发执行
+- `PythonTask` 的“异步”仅用于异步读取单个子进程输出，不代表多个任务自动并发执行
+- 并发模式基于线程池调度，任务本身应避免无保护地共享可变状态
 - `PythonTask` 当前使用 `python <script>` 形式启动脚本，因此依赖运行环境中可用的 `python` 命令
 - `taskmanager` 在导入时会创建默认日志目录，这是当前包的导入副作用
 - 仓库当前没有单独的 lint 或 build 工作流，主要通过示例和测试验证功能

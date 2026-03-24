@@ -1,4 +1,7 @@
+import os
 import tempfile
+import threading
+import time
 import unittest
 import uuid
 
@@ -22,13 +25,23 @@ class TaskQueueSmokeTests(unittest.TestCase):
         set_log_path(self.original_log_path)
         self.temp_dir.cleanup()
 
-    def make_queue(self, ignore_fail=False, error_function=None, use_rich_progress=False):
+    def make_queue(
+        self,
+        ignore_fail=False,
+        error_function=None,
+        use_rich_progress=False,
+        max_workers=1,
+        log_in_file=True,
+        log_in_console=False,
+    ):
         queue = TaskQueue(
             name=f"TestQueue_{uuid.uuid4().hex}",
-            log_in_console=False,
+            log_in_file=log_in_file,
+            log_in_console=log_in_console,
             ignore_fail=ignore_fail,
             errorFunction=error_function,
             use_rich_progress=use_rich_progress,
+            max_workers=max_workers,
         )
         self.loggers.append(queue.logger)
         return queue
@@ -143,3 +156,97 @@ class TaskQueueSmokeTests(unittest.TestCase):
     def test_invalid_progress_bar_raises_value_error(self):
         with self.assertRaises(ValueError):
             self.make_queue(use_rich_progress='invalid')
+
+    def test_invalid_max_workers_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            self.make_queue(max_workers=0)
+
+        with self.assertRaises(ValueError):
+            self.make_queue(max_workers='2')
+
+    def test_duplicate_task_names_raise_value_error(self):
+        queue = self.make_queue()
+        queue.add_task(FunctionTask("duplicate", lambda: 0))
+        queue.add_task(FunctionTask("duplicate", lambda: 0))
+
+        with self.assertRaises(ValueError):
+            self.run_queue(queue)
+
+    def test_tasks_can_run_concurrently(self):
+        state = {
+            "active": 0,
+            "max_active": 0,
+            "started": 0,
+        }
+        started_event = threading.Event()
+        lock = threading.Lock()
+
+        def concurrent_task():
+            with lock:
+                state["active"] += 1
+                state["max_active"] = max(state["max_active"], state["active"])
+                state["started"] += 1
+                if state["started"] == 2:
+                    started_event.set()
+            started_event.wait(timeout=0.5)
+            time.sleep(0.05)
+            with lock:
+                state["active"] -= 1
+            return 0
+
+        queue = self.make_queue(max_workers=2)
+        queue.add_task(FunctionTask("first", concurrent_task))
+        queue.add_task(FunctionTask("second", concurrent_task))
+
+        self.run_queue(queue)
+
+        self.assertEqual(state["max_active"], 2)
+
+    def test_parallel_queue_creates_log_files(self):
+        queue = self.make_queue(max_workers=2)
+        queue.add_task(FunctionTask("first", lambda: 0))
+        queue.add_task(FunctionTask("second", lambda: 0))
+
+        self.run_queue(queue)
+
+        self.assertTrue(os.path.exists(os.path.join(queue.dir_path, 'log.txt')))
+        self.assertTrue(os.path.exists(os.path.join(queue.dir_path, 'first.txt')))
+        self.assertTrue(os.path.exists(os.path.join(queue.dir_path, 'second.txt')))
+
+    def test_parallel_queue_stops_submitting_after_failure(self):
+        started = []
+        error_calls = []
+        running_started = threading.Event()
+        lock = threading.Lock()
+
+        def fail_task():
+            running_started.wait(timeout=0.2)
+            with lock:
+                started.append("fail")
+            return 1
+
+        def running_task():
+            with lock:
+                started.append("running")
+            running_started.set()
+            time.sleep(0.2)
+            return 0
+
+        def should_not_run():
+            with lock:
+                started.append("after_fail")
+            return 0
+
+        def on_error():
+            error_calls.append("called")
+
+        queue = self.make_queue(max_workers=2, error_function=on_error)
+        queue.add_task(FunctionTask("fail", fail_task))
+        queue.add_task(FunctionTask("running", running_task))
+        queue.add_task(FunctionTask("after_fail", should_not_run))
+
+        self.run_queue(queue)
+
+        self.assertCountEqual(started, ["fail", "running"])
+        self.assertNotIn("after_fail", started)
+        self.assertEqual(error_calls, ["called"])
