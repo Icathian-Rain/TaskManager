@@ -10,8 +10,7 @@ def set_log_path(path):
     LOG_PATH = path
 
 def init():
-    if not os.path.exists('logs'):
-        os.makedirs('logs')
+    os.makedirs(LOG_PATH, exist_ok=True)
 
 class TaskQueue:
     def __init__(self, name='TaskQueue', log_in_file=True, log_in_console=True, ignore_fail=False, errorFunction=None):

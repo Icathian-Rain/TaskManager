@@ -1,5 +1,6 @@
 import time
-from taskmanager import TaskQueue, Task, PythonTask, NormalTask, FunctionTask
+from taskmanager import TaskQueue, PythonTask, NormalTask, FunctionTask
+
 
 def function1():
     print('Function1 is running...')
@@ -8,19 +9,26 @@ def function1():
 
 
 if __name__ == '__main__':
-    task_queue = TaskQueue(name='Test', log_in_console=True, ignore_fail=True)
-    # 普通任务
+    # 创建一个队列；ignore_fail=True 表示某个任务失败后继续执行后续任务
+    task_queue = TaskQueue(name='ExampleQueue', log_in_console=True, ignore_fail=True)
+
+    # 普通占位任务
     task_queue.add_task(NormalTask('Hello'))
-    # 普通python任务
-    task_queue.add_task(PythonTask('PythonTask1', 'pythonTask/task1.py', is_async=False))
-    # 带参数的python任务
+
+    # 运行一个 Python 脚本任务
+    task_queue.add_task(PythonTask('PythonTask1', 'pythonTask/task1.py'))
+
+    # 运行一个带命令行参数的 Python 脚本任务
     task2_args = ['--args1', 'arg1', '--args2', 'arg2']
-    task_queue.add_task(PythonTask('PythonTask2', 'pythonTask/task2.py', is_async=False, args=task2_args))
-    # 错误退出的python任务
-    task_queue.add_task(PythonTask('PythonTask3', 'pythonTask/task3.py', is_async=False))
-    # 函数任务
+    task_queue.add_task(PythonTask('PythonTask2', 'pythonTask/task2.py', args=task2_args))
+
+    # 一个会失败的脚本任务，用于演示 ignore_fail=True 的行为
+    task_queue.add_task(PythonTask('PythonTask3', 'pythonTask/task3.py'))
+
+    # 包装普通 Python 函数为任务
     task_queue.add_task(FunctionTask('FunctionTask1', function1))
-    # 普通任务
+
+    # 再添加一个普通任务，方便观察失败后是否继续执行
     task_queue.add_task(NormalTask('World'))
 
     task_queue.run()
